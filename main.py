@@ -1,5 +1,5 @@
 import discord
-from discord import Member, User, app_commands, ui
+from discord import Member, Role, User, app_commands, ui
 import re
 import os
 from dotenv import load_dotenv
@@ -10,6 +10,7 @@ load_dotenv()
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
@@ -22,9 +23,9 @@ TEAM_THREAD_PARENT_ID = int(TEAM_THREAD_PARENT_ID)
 
 
 class JoinRequestButtons(discord.ui.View):
-    def __init__(self, team: Team, user: User | Member, name: str, reason: str, ):
+    def __init__(self, team_id: int, user: User | Member, name: str, reason: str, ):
         super().__init__(timeout=None)
-        self.team = team
+        self.team_id = team_id
         self.user = user
         self.name = name
         self.reason = reason
@@ -34,50 +35,86 @@ class JoinRequestButtons(discord.ui.View):
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
             return
+
+        team = await get_team(interaction.guild.id, self.team_id)
+
+        if not team:
+            await interaction.response.send_message("No team registered in this thread.", ephemeral=True)
+            return
+
         if not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message("This command can only be used by members of the guild.", ephemeral=True)
             return
 
-        if self.team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
+        if team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("You must be the team owner or an administrator to accept a join request.", ephemeral=True)
             return
 
-        # Add user to the team
-        self.team.member.append(self.user.id)
-        await update_team(interaction.guild.id, self.team)
+        embeds = []
 
-        if self.team.role_id:
-            role = interaction.guild.get_role(self.team.role_id)
+        # Add user to the team
+
+        if (self.user.id in team.member):
+            await interaction.response.send_message("User is already a member of this team.", ephemeral=True)
+            await interaction.response.edit_message(view=None)
+            return
+        
+        team.member.append(self.user.id)
+        await update_team(interaction.guild.id, team)
+
+        if team.role_id:
+            role = interaction.guild.get_role(team.role_id)
             if role:
                 try:
-                    await interaction.user.add_roles(role)
+                    if isinstance(self.user, discord.Member):
+                        await self.user.add_roles(role)
                 except discord.Forbidden:
-                    await interaction.response.send_message("I do not have permission to assign roles in this guild.", ephemeral=True)
+                    embeds.append(
+                        discord.Embed(
+                            title="Role Assignment Failed",
+                            description="I do not have permission to assign roles in this guild.",
+                            color=discord.Color.red()
+                        )
+                    )
                 except discord.HTTPException as e:
-                    await interaction.response.send_message(f"Failed to assign role: {e}", ephemeral=True)
+                    embeds.append(
+                        discord.Embed(
+                            title="Role Assignment Failed",
+                            description=f"Failed to assign role: {e}",
+                            color=discord.Color.red()
+                        )
+                    )
 
         members = "\n".join(
-            [f"<@{member}>" for member in self.team.member])
+            [f"<@{member}>" for member in team.member])
         embed = discord.Embed(
             title="Team Joined",
-            description=f"{self.user.mention} (IGN: {self.name}) have successfully join the team **{self.team.name}** **[{self.team.tag}]**, welcome to the team!.",
+            description=f"{self.user.mention} (IGN: {self.name}) have successfully join the team **{team.name}** **[{team.tag}]**, welcome to the team!.",
             color=discord.Color.green()
         )
         embed.add_field(
             name="Reason", value=self.reason, inline=False)
         embed.add_field(name="Members", value=members, inline=False)
+        embeds.append(embed)
         await interaction.response.edit_message(view=None)
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embeds=embeds)
 
     @ui.button(label="Reject", style=discord.ButtonStyle.red)
     async def red_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
             return
+
+        team = await get_team(interaction.guild.id, self.team_id)
+
+        if not team:
+            await interaction.response.send_message("No team registered in this thread.", ephemeral=True)
+            return
+
         if not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message("This command can only be used by members of the guild.", ephemeral=True)
             return
-        if self.team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
+        if team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("You must be the team owner or an administrator to reject a join request.", ephemeral=True)
             return
         embed = discord.Embed(
@@ -94,11 +131,10 @@ class JoinRequestModal(ui.Modal, title='Join request question'):
     reason = ui.TextInput(
         label='Reason', style=discord.TextStyle.paragraph, max_length=200)
 
-    def __init__(self, team: Team, user: User | Member):
+    def __init__(self, team: Team):
         self.reason.placeholder = f"{team.reason}{' (optional)' if team.auto_accept else ''}"
         self.reason.required = not team.auto_accept
-        self.team = team
-        self.user = user
+        self.team_id = team.thread_id
         super().__init__()
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -109,40 +145,65 @@ class JoinRequestModal(ui.Modal, title='Join request question'):
             await interaction.response.send_message("This command can only be used by members of the guild.", ephemeral=True)
             return
 
-        if self.team.auto_accept:
-            # Add user to the team
-            self.team.member.append(interaction.user.id)
-            await update_team(interaction.guild.id, self.team)
+        team = await get_team(interaction.guild.id, self.team_id)
+        if not team:
+            await interaction.response.send_message("No team registered in this thread.", ephemeral=True)
+            return
 
-            if self.team.role_id:
-                role = interaction.guild.get_role(self.team.role_id)
+        if team.auto_accept:
+            embeds = []
+
+            if interaction.user.id in team.member:
+                await interaction.response.send_message("You are already a member of this team.", ephemeral=True)
+                return
+
+            # Add user to the team
+            team.member.append(interaction.user.id)
+            await update_team(interaction.guild.id, team)
+
+            if team.role_id:
+                role = interaction.guild.get_role(team.role_id)
                 if role:
                     try:
                         await interaction.user.add_roles(role)
                     except discord.Forbidden:
-                        await interaction.response.send_message("I do not have permission to assign roles in this guild.", ephemeral=True)
+                        embeds.append(
+                            discord.Embed(
+                                title="Role Assignment Failed",
+                                description="I do not have permission to assign roles in this guild.",
+                                color=discord.Color.red()
+                            )
+                        )
                     except discord.HTTPException as e:
-                        await interaction.response.send_message(f"Failed to assign role: {e}", ephemeral=True)
+                        embeds.append(
+                            discord.Embed(
+                                title="Role Assignment Failed",
+                                description=f"Failed to assign role: {e}",
+                                color=discord.Color.red()
+                            )
+                        )
 
             members = "\n".join(
-                [f"<@{member}>" for member in self.team.member])
+                [f"<@{member}>" for member in team.member])
             embed = discord.Embed(
                 title="Team Joined",
-                description=f"{self.user.mention} (IGN: {self.name.value}) have successfully join the team **{self.team.name}** **[{self.team.tag}]**, welcome to the team!.",
+                description=f"{interaction.user.mention} (IGN: {self.name.value}) have successfully join the team **{team.name}** **[{team.tag}]**, welcome to the team!.",
                 color=discord.Color.green()
             )
-            embed.add_field(
-                name="Reason", value=self.reason.value, inline=False)
+            if self.reason.value:
+                embed.add_field(
+                    name="Reason", value=self.reason.value, inline=False)
             embed.add_field(name="Members", value=members, inline=False)
-            await interaction.response.send_message(embed=embed, silent=True)
+            embeds.append(embed)
+            await interaction.response.send_message(embeds=embeds, silent=True)
             return
 
         button = JoinRequestButtons(
-            team=self.team, user=self.user, name=self.name.value, reason=self.reason.value)
+            team_id=team.thread_id, user=interaction.user, name=self.name.value, reason=self.reason.value)
         # If not auto accept, send join request
         embed = discord.Embed(
             title="Join Request",
-            description=f"{self.user.mention} (IGN: {self.name.value}) has requested to join the team **{self.team.name}** **[{self.team.tag}]**.",
+            description=f"{interaction.user.mention} (IGN: {self.name.value}) has requested to join the team **{team.name}** **[{team.tag}]**.",
             color=discord.Color.blue()
         )
         embed.add_field(name="Reason", value=self.reason.value, inline=False)
@@ -199,6 +260,7 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
             await interaction.response.send_message("Team is already registered with the same name or tag.", ephemeral=True)
             return
 
+    embeds = []
     role = None
     if make_role:
         # Create a new role with the specified color
@@ -209,17 +271,41 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
                 mentionable=True,
             )
         except discord.Forbidden:
-            await interaction.response.send_message("I do not have permission to create roles in this guild, please ask admin to create manually.", ephemeral=True)
+            embeds.append(
+                discord.Embed(
+                    title="Role Creation Failed",
+                    description="I do not have permission to create roles in this guild, please ask admin to create manually.",
+                    color=discord.Color.red()
+                )
+            )
         except discord.HTTPException as e:
-            await interaction.response.send_message(f"Failed to create role: {e}, please ask admin to create manually.", ephemeral=True)
+            embeds.append(
+                discord.Embed(
+                    title="Role Creation Failed",
+                    description=f"Failed to create role: {e}, please ask admin to create manually.",
+                    color=discord.Color.red()
+                )
+            )
 
         if (role is not None):
             try:
                 await interaction.user.add_roles(role)
             except discord.Forbidden:
-                await interaction.response.send_message("I do not have permission to assign roles in this guild.", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Assignment Failed",
+                        description="I do not have permission to assign roles in this guild.",
+                        color=discord.Color.red()
+                    )
+                )
             except discord.HTTPException as e:
-                await interaction.response.send_message(f"Failed to assign role: {e}", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Assignment Failed",
+                        description=f"Failed to assign role: {e}",
+                        color=discord.Color.red()
+                    )
+                )
 
     await add_team(interaction.guild.id, Team(
         thread_id=interaction.channel.id,
@@ -244,8 +330,9 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
     embed.add_field(name="Team Color", value=f"#{team_color}", inline=True)
     embed.add_field(name="Auto Accept",
                     value="Yes" if auto_accept else "No", inline=True)
+    embeds.append(embed)
 
-    await interaction.response.send_message(embed=embed, silent=True)
+    await interaction.response.send_message(embeds=embeds, silent=True)
 
 
 @tree.command(name="unregister_team", description="Unregister a team, warn: this will delete the teams data and role if exists!")
@@ -271,15 +358,29 @@ async def unregister_team(interaction: discord.Interaction):
         await interaction.response.send_message("You must be the team owner or an administrator to unregister a team.", ephemeral=True)
         return
 
+    embeds = []
+
     if team.role_id:
         role = interaction.guild.get_role(team.role_id)
         if role:
             try:
                 await role.delete()
             except discord.Forbidden:
-                await interaction.response.send_message("I do not have permission to delete roles in this guild, please ask admin to create manually.", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Deletion Failed",
+                        description="I do not have permission to delete roles in this guild, please ask admin to delete manually.",
+                        color=discord.Color.red()
+                    )
+                )
             except discord.HTTPException as e:
-                await interaction.response.send_message(f"Failed to delete role: {e}, please ask admin to create manually.", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Deletion Failed",
+                        description=f"Failed to delete role: {e}, please ask admin to delete manually.",
+                        color=discord.Color.red()
+                    )
+                )
 
     await remove_team(interaction.guild.id, team.thread_id)
 
@@ -288,7 +389,8 @@ async def unregister_team(interaction: discord.Interaction):
         description=f"Team **{team.name}** **[{team.tag}]** has been unregistered successfully.",
         color=discord.Color.red()
     )
-    await interaction.response.send_message(embed=embed, silent=True)
+    embeds.append(embed)
+    await interaction.response.send_message(embeds=embeds, silent=True)
 
 
 @tree.command(name="team_details", description="View details of a team registered in this thread")
@@ -331,7 +433,7 @@ async def team_details(interaction: discord.Interaction):
 group = app_commands.Group(name="update_team", description="Update a team")
 
 
-async def update_team_common(interaction: discord.Interaction, *, name: str | None = None, tag: str | None = None, color: str | None = None, owner: User | None = None, auto_accept: bool | None = None, reason: str | None = None) -> None:
+async def update_team_common(interaction: discord.Interaction, *, name: str | None = None, tag: str | None = None, color: str | None = None, owner: User | None = None, auto_accept: bool | None = None, reason: str | None = None, role: Role | None = None) -> None:
     if not interaction.guild:
         await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
         return
@@ -352,6 +454,8 @@ async def update_team_common(interaction: discord.Interaction, *, name: str | No
     if team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("You must be the team owner or an administrator to update a team.", ephemeral=True)
         return
+
+    embeds = []
 
     if name is not None:
         name = name.strip()
@@ -379,7 +483,13 @@ async def update_team_common(interaction: discord.Interaction, *, name: str | No
                 try:
                     await role.edit(name=team.tag)
                 except (discord.Forbidden, discord.HTTPException) as e:
-                    await interaction.response.send_message(f"Failed to update role: {e}", ephemeral=True)
+                    embeds.append(
+                        discord.Embed(
+                            title="Role Update Failed",
+                            description=f"Failed to update role: {e}",
+                            color=discord.Color.red()
+                        )
+                    )
 
     if color is not None:
         color = color.lstrip('#').upper()
@@ -394,7 +504,13 @@ async def update_team_common(interaction: discord.Interaction, *, name: str | No
                 try:
                     await role.edit(color=discord.Color(int(team.color, 16)))
                 except (discord.Forbidden, discord.HTTPException) as e:
-                    await interaction.response.send_message(f"Failed to update role: {e}", ephemeral=True)
+                    embeds.append(
+                        discord.Embed(
+                            title="Role Update Failed",
+                            description=f"Failed to update role: {e}",
+                            color=discord.Color.red()
+                        )
+                    )
 
     if owner is not None:
         if owner.bot:
@@ -411,6 +527,33 @@ async def update_team_common(interaction: discord.Interaction, *, name: str | No
     if reason is not None:
         team.reason = reason.strip()
 
+    if role is not None:
+        if team.role_id is not None:
+            await interaction.response.send_message("You cannot update the role if the team already has a role assigned, update tag and color instead.", ephemeral=True)
+            return
+        team.role_id = role.id
+        for member_id in team.member:
+            member = interaction.guild.get_member(member_id)
+            if member:
+                try:
+                    await member.add_roles(role)
+                except discord.Forbidden:
+                    embeds.append(
+                        discord.Embed(
+                            title="Role Assignment Failed",
+                            description="I do not have permission to assign roles in this guild.",
+                            color=discord.Color.red()
+                        )
+                    )
+                except discord.HTTPException as e:
+                    embeds.append(
+                        discord.Embed(
+                            title="Role Assignment Failed",
+                            description=f"Failed to assign role: {e}",
+                            color=discord.Color.red()
+                        )
+                    )
+
     await update_team(interaction.guild.id, team)
 
     embed = discord.Embed(
@@ -424,8 +567,9 @@ async def update_team_common(interaction: discord.Interaction, *, name: str | No
     embed.add_field(name="Team Color", value=f"#{team.color}", inline=True)
     embed.add_field(name="Auto Accept",
                     value="Yes" if team.auto_accept else "No", inline=True)
+    embeds.append(embed)
 
-    await interaction.response.send_message(embed=embed, silent=True)
+    await interaction.response.send_message(embeds=embeds, silent=True)
 
 
 @group.command(name="name", description="Update the team name")
@@ -457,6 +601,10 @@ async def update_team_auto_accept(interaction: discord.Interaction, auto_accept:
 async def update_team_reason_placeholder(interaction: discord.Interaction, reason: str) -> None:
     await update_team_common(interaction, reason=reason)
 
+@group.command(name="role", description="Update the team role (only work when there is no role assigned)")
+async def update_team_role(interaction: discord.Interaction, role: Role) -> None:
+    await update_team_common(interaction, role=role)
+
 tree.add_command(group)
 
 
@@ -484,7 +632,7 @@ async def join_team(interaction: discord.Interaction):
         return
 
     # show for user to join team
-    modal = JoinRequestModal(team, interaction.user)
+    modal = JoinRequestModal(team)
     await interaction.response.send_modal(modal)
 
 
@@ -511,8 +659,14 @@ async def leave_team(interaction: discord.Interaction):
         await interaction.response.send_message("You are not a member of this team.", ephemeral=True)
         return
 
+    if team.owner_id == interaction.user.id:
+        await interaction.response.send_message("You cannot leave the team as the owner. Please transfer ownership or unregister the team.", ephemeral=True)
+        return
+
     team.member.remove(interaction.user.id)
     await update_team(interaction.guild.id, team)
+
+    embeds = []
 
     if team.role_id:
         role = interaction.guild.get_role(team.role_id)
@@ -520,16 +674,29 @@ async def leave_team(interaction: discord.Interaction):
             try:
                 await interaction.user.remove_roles(role)
             except discord.Forbidden:
-                await interaction.response.send_message("I do not have permission to unassign roles in this guild.", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Removal Failed",
+                        description="I do not have permission to unassign roles in this guild.",
+                        color=discord.Color.red()
+                    )
+                )
             except discord.HTTPException as e:
-                await interaction.response.send_message(f"Failed to unassign role: {e}", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Removal Failed",
+                        description=f"Failed to unassign role: {e}",
+                        color=discord.Color.red()
+                    )
+                )
 
     embed = discord.Embed(
         title="Team left",
         description=f"You have successfully leave the team **{team.name}** **[{team.tag}]**.",
         color=discord.Color.green()
     )
-    await interaction.response.send_message(embed=embed, silent=True, ephemeral=True)
+    embeds.append(embed)
+    await interaction.response.send_message(embeds=embeds, silent=True, ephemeral=True)
 
 
 @tree.command(name="add_team_member", description="Add a member to team registered in this thread")
@@ -567,15 +734,29 @@ async def add_team_member(interaction: discord.Interaction, new_member: User) ->
     team.member.append(new_member.id)
     await update_team(interaction.guild.id, team)
 
+    embeds = []
+
     if team.role_id:
         role = interaction.guild.get_role(team.role_id)
         if role and isinstance(new_member, discord.Member):
             try:
                 await new_member.add_roles(role)
             except discord.Forbidden:
-                await interaction.response.send_message("I do not have permission to assign roles in this guild.", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Assignment Failed",
+                        description="I do not have permission to assign roles in this guild.",
+                        color=discord.Color.red()
+                    )
+                )
             except discord.HTTPException as e:
-                await interaction.response.send_message(f"Failed to assign role: {e}", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Assignment Failed",
+                        description=f"Failed to assign role: {e}",
+                        color=discord.Color.red()
+                    )
+                )
 
     members = "\n".join([f"<@{member}>" for member in team.member])
     embed = discord.Embed(
@@ -584,7 +765,8 @@ async def add_team_member(interaction: discord.Interaction, new_member: User) ->
         color=discord.Color.green()
     )
     embed.add_field(name="Members", value=members, inline=False)
-    await interaction.response.send_message(embed=embed, silent=True)
+    embeds.append(embed)
+    await interaction.response.send_message(embeds=embeds, silent=True)
 
 
 @tree.command(name="remove_team_member", description="Remove a member from team registered in this thread")
@@ -621,15 +803,29 @@ async def remove_team_member(interaction: discord.Interaction, member: User) -> 
     team.member.remove(member.id)
     await update_team(interaction.guild.id, team)
 
+    embeds = []
+
     if team.role_id:
         role = interaction.guild.get_role(team.role_id)
         if role and isinstance(member, discord.Member):
             try:
                 await member.remove_roles(role)
             except discord.Forbidden:
-                await interaction.response.send_message("I do not have permission to unassign roles in this guild.", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Removal Failed",
+                        description="I do not have permission to unassign roles in this guild.",
+                        color=discord.Color.red()
+                    )
+                )
             except discord.HTTPException as e:
-                await interaction.response.send_message(f"Failed to unassign role: {e}", ephemeral=True)
+                embeds.append(
+                    discord.Embed(
+                        title="Role Removal Failed",
+                        description=f"Failed to unassign role: {e}",
+                        color=discord.Color.red()
+                    )
+                )
 
     members = "\n".join([f"<@{m}>" for m in team.member])
     embed = discord.Embed(
@@ -638,7 +834,8 @@ async def remove_team_member(interaction: discord.Interaction, member: User) -> 
         color=discord.Color.green()
     )
     embed.add_field(name="Members", value=members, inline=False)
-    await interaction.response.send_message(embed=embed, silent=True, ephemeral=True)
+    embeds.append(embed)
+    await interaction.response.send_message(embeds=embeds, silent=True, ephemeral=True)
 
 
 @client.event
