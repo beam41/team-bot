@@ -433,7 +433,7 @@ async def team_details(interaction: discord.Interaction):
 group = app_commands.Group(name="update_team", description="Update a team")
 
 
-async def update_team_common(interaction: discord.Interaction, *, name: str | None = None, tag: str | None = None, color: str | None = None, owner: User | None = None, auto_accept: bool | None = None, reason: str | None = None, role: Role | None = None) -> None:
+async def update_team_common(interaction: discord.Interaction, *, name: str | None = None, tag: str | None = None, color: str | None = None, owner: User | None = None, auto_accept: bool | None = None, reason: str | None = None, link_role: Role | None = None) -> None:
     if not interaction.guild:
         await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
         return
@@ -527,16 +527,16 @@ async def update_team_common(interaction: discord.Interaction, *, name: str | No
     if reason is not None:
         team.reason = reason.strip()
 
-    if role is not None:
+    if link_role is not None:
         if team.role_id is not None:
             await interaction.response.send_message("You cannot update the role if the team already has a role assigned, update tag and color instead.", ephemeral=True)
             return
-        team.role_id = role.id
+        team.role_id = link_role.id
         for member_id in team.member:
             member = interaction.guild.get_member(member_id)
             if member:
                 try:
-                    await member.add_roles(role)
+                    await member.add_roles(link_role)
                 except discord.Forbidden:
                     embeds.append(
                         discord.Embed(
@@ -603,7 +603,7 @@ async def update_team_reason_placeholder(interaction: discord.Interaction, reaso
 
 @group.command(name="role", description="Update the team role (only work when there is no role assigned)")
 async def update_team_role(interaction: discord.Interaction, role: Role) -> None:
-    await update_team_common(interaction, role=role)
+    await update_team_common(interaction, link_role=role)
 
 tree.add_command(group)
 

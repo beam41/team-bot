@@ -30,6 +30,7 @@ async def load_team(guild: int):
     teams = await read(guild)
     return teams
 
+
 async def get_team(guild: int, thread_id: int):
     teams = await load_team(guild)
     for team in teams:
@@ -37,17 +38,20 @@ async def get_team(guild: int, thread_id: int):
             return Team(**team.__dict__)
     return None
 
+
 async def add_team(guild: int, team: Team):
     teams = await load_team(guild)
     teams.append(team)
     await write(guild, teams)
     return teams
 
+
 async def remove_team(guild: int, thread_id: int):
     teams = await load_team(guild)
     teams = [team for team in teams if team.thread_id != thread_id]
     await write(guild, teams)
     return teams
+
 
 async def update_team(guild: int, team: Team):
     teams = await load_team(guild)
