@@ -12,6 +12,7 @@ class Team:
     color: str
     auto_accept: bool
     member: list[int]
+    reason: str
 
 
 # simple read/write can be replace with a database later

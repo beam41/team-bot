@@ -1,5 +1,5 @@
 import discord
-from discord import User, app_commands
+from discord import Member, User, app_commands, ui
 import re
 import os
 from dotenv import load_dotenv
@@ -21,6 +21,65 @@ if not TEAM_THREAD_PARENT_ID or not TEAM_THREAD_PARENT_ID.isdigit():
 TEAM_THREAD_PARENT_ID = int(TEAM_THREAD_PARENT_ID)
 
 
+class JoinRequestModal(ui.Modal, title='Join request question'):
+    name = ui.TextInput(label='In game name',
+                        style=discord.TextStyle.short, max_length=12)
+    reason = ui.TextInput(
+        label='Reason', style=discord.TextStyle.paragraph, max_length=200)
+
+    def __init__(self, team: Team, user: User | Member):
+        self.reason.placeholder = f"{team.reason}{' (optional)' if team.auto_accept else ''}"
+        self.reason.required = not team.auto_accept
+        self.team = team
+        self.user = user
+        super().__init__()
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
+            return
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("This command can only be used by members of the guild.", ephemeral=True)
+            return
+
+        if self.team.auto_accept:
+            # Add user to the team
+            self.team.member.append(interaction.user.id)
+            await update_team(interaction.guild.id, self.team)
+
+            if self.team.role_id:
+                role = interaction.guild.get_role(self.team.role_id)
+                if role:
+                    try:
+                        await interaction.user.add_roles(role)
+                    except discord.Forbidden:
+                        await interaction.response.send_message("I do not have permission to assign roles in this guild.", ephemeral=True)
+                    except discord.HTTPException as e:
+                        await interaction.response.send_message(f"Failed to assign role: {e}", ephemeral=True)
+
+            members = "\n".join(
+                [f"<@{member}>" for member in self.team.member])
+            embed = discord.Embed(
+                title="Team Joined",
+                description=f"{self.user.mention} (IGN: {self.name.value}) have successfully join the team **{self.team.name}** **[{self.team.tag}]**, welcome to the team!.",
+                color=discord.Color.green()
+            )
+            embed.add_field(
+                name="Reason", value=self.reason.value, inline=False)
+            embed.add_field(name="Members", value=members, inline=False)
+            await interaction.response.send_message(embed=embed, silent=True)
+            return
+        
+        # If not auto accept, send join request
+        embed = discord.Embed(
+            title="Join Request",
+            description=f"{self.user.mention} (IGN: {self.name.value}) has requested to join the team **{self.team.name}** **[{self.team.tag}]**.",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Reason", value=self.reason.value, inline=False)
+        
+
+
 @tree.command(name="register_team", description="Register a team, use this under your team threads")
 @app_commands.describe(
     name="Team name",
@@ -28,8 +87,9 @@ TEAM_THREAD_PARENT_ID = int(TEAM_THREAD_PARENT_ID)
     team_color="Team official color (used in role)",
     auto_accept="Auto accept team members, aka FFA team",
     make_role="Make new role for the team (If your team already have role ask admin to link role to the team)",
+    reason_placeholder="Placeholder for the reason input, this will be used on join request pop up"
 )
-async def register_team(interaction: discord.Interaction, name: str, tag: str, team_color: str, auto_accept: bool, make_role: bool):
+async def register_team(interaction: discord.Interaction, name: str, tag: str, team_color: str, auto_accept: bool, make_role: bool, reason_placeholder: str):
     if not interaction.guild:
         await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
         return
@@ -47,9 +107,10 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
         return
 
     name = name.strip()
-    team_color = team_color.lstrip('#')  # Remove leading '#' if present
+    # Remove leading '#' if present
+    team_color = team_color.lstrip('#').upper()
 
-    if not re.match(r'^[0-9A-Fa-f]{6}$', team_color):
+    if not re.match(r'^[0-9A-F]{6}$', team_color):
         await interaction.response.send_message("Invalid team color. Please provide a valid hex color code (6 characters, e.g., 'FF5733').", ephemeral=True)
         return
 
@@ -97,7 +158,8 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
         tag=tag,
         color=team_color,
         auto_accept=auto_accept,
-        member=[interaction.user.id]
+        member=[interaction.user.id],
+        reason=reason_placeholder.strip(),
     ))
 
     embed = discord.Embed(
@@ -198,7 +260,7 @@ async def team_details(interaction: discord.Interaction):
 group = app_commands.Group(name="update_team", description="Update a team")
 
 
-async def update_team_common(interaction: discord.Interaction, *, name: str | None = None, tag: str | None = None, color: str | None = None, owner: User | None = None, auto_accept: bool | None = None) -> None:
+async def update_team_common(interaction: discord.Interaction, *, name: str | None = None, tag: str | None = None, color: str | None = None, owner: User | None = None, auto_accept: bool | None = None, reason: str | None = None) -> None:
     if not interaction.guild:
         await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
         return
@@ -249,8 +311,8 @@ async def update_team_common(interaction: discord.Interaction, *, name: str | No
                     await interaction.response.send_message(f"Failed to update role: {e}", ephemeral=True)
 
     if color is not None:
-        color = color.lstrip('#')
-        if not re.match(r'^[0-9A-Fa-f]{6}$', color):
+        color = color.lstrip('#').upper()
+        if not re.match(r'^[0-9A-F]{6}$', color):
             await interaction.response.send_message("Invalid team color. Please provide a valid hex color code (6 characters, e.g., 'FF5733').", ephemeral=True)
             return
         team.color = color
@@ -274,6 +336,9 @@ async def update_team_common(interaction: discord.Interaction, *, name: str | No
 
     if auto_accept is not None:
         team.auto_accept = auto_accept
+
+    if reason is not None:
+        team.reason = reason.strip()
 
     await update_team(interaction.guild.id, team)
 
@@ -316,6 +381,11 @@ async def update_team_owner(interaction: discord.Interaction, owner: User) -> No
 async def update_team_auto_accept(interaction: discord.Interaction, auto_accept: bool) -> None:
     await update_team_common(interaction, auto_accept=auto_accept)
 
+
+@group.command(name="reason_placeholder", description="Update the team join request reason placeholder")
+async def update_team_reason_placeholder(interaction: discord.Interaction, reason: str) -> None:
+    await update_team_common(interaction, reason=reason)
+
 tree.add_command(group)
 
 
@@ -342,34 +412,9 @@ async def join_team(interaction: discord.Interaction):
         await interaction.response.send_message("You are already a member of this team.", ephemeral=True)
         return
 
-    if team.auto_accept:
-        # Add user to the team
-        team.member.append(interaction.user.id)
-        await update_team(interaction.guild.id, team)
-
-        if team.role_id:
-            role = interaction.guild.get_role(team.role_id)
-            if role:
-                try:
-                    await interaction.user.add_roles(role)
-                except discord.Forbidden:
-                    await interaction.response.send_message("I do not have permission to assign roles in this guild.", ephemeral=True)
-                except discord.HTTPException as e:
-                    await interaction.response.send_message(f"Failed to assign role: {e}", ephemeral=True)
-
-        members = "\n".join([f"<@{member}>" for member in team.member])
-        embed = discord.Embed(
-            title="Team Joined",
-            description=f"You have successfully join the team **{team.name}** **[{team.tag}]**, welcome to the team!.",
-            color=discord.Color.green()
-        )
-        embed.add_field(name="Members", value=members, inline=False)
-        await interaction.response.send_message(embed=embed, silent=True)
-        return
-
-    # todo: add request to join team, with yes no button for owner to accept
-
-    return
+    # show for user to join team
+    modal = JoinRequestModal(team, interaction.user)
+    await interaction.response.send_modal(modal)
 
 
 @tree.command(name="leave_team", description="Leave a team registered in this thread, this will not notify anyone don't worry")
