@@ -58,7 +58,7 @@ class JoinRequestButtons(discord.ui.View):
             await interaction.response.send_message("User is already a member of this team.", ephemeral=True)
             await interaction.response.edit_message(view=None)
             return
-        
+
         team.member.append(self.user.id)
         await update_team(interaction.guild.id, team)
 
@@ -218,10 +218,10 @@ class JoinRequestModal(ui.Modal, title='Join request question'):
     tag="Team tag",
     team_color="Team official color (used in role)",
     auto_accept="Auto accept team members, aka FFA team",
-    make_role="Make new role for the team (If your team already have role ask admin to link role to the team)",
-    reason_placeholder="Placeholder for the reason input, this will be used on join request pop up"
+    reason_placeholder="Placeholder for the reason input, this will be used on join request pop up",
+    skip_make_role="For legacy team, ask admin to link role to the team",
 )
-async def register_team(interaction: discord.Interaction, name: str, tag: str, team_color: str, auto_accept: bool, make_role: bool, reason_placeholder: str):
+async def register_team(interaction: discord.Interaction, name: str, tag: str, team_color: str, auto_accept: bool,  reason_placeholder: str, skip_make_role: bool = True):
     if not interaction.guild:
         await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
         return
@@ -262,7 +262,7 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
 
     embeds = []
     role = None
-    if make_role:
+    if not skip_make_role:
         # Create a new role with the specified color
         try:
             role = await interaction.guild.create_role(
@@ -326,7 +326,7 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
     )
     embed.add_field(name="Owner", value=interaction.user.mention, inline=True)
     embed.add_field(name="Role", value=(
-        role.mention if role else "No role created") if make_role else "No role created", inline=True)
+        role.mention if role else "No role created") if not skip_make_role else "No role created", inline=True)
     embed.add_field(name="Team Color", value=f"#{team_color}", inline=True)
     embed.add_field(name="Auto Accept",
                     value="Yes" if auto_accept else "No", inline=True)
@@ -451,9 +451,14 @@ async def update_team_common(interaction: discord.Interaction, *, name: str | No
         await interaction.response.send_message("No team registered in this thread.", ephemeral=True)
         return
 
-    if team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("You must be the team owner or an administrator to update a team.", ephemeral=True)
-        return
+    if link_role:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must an administrator to update a team.", ephemeral=True)
+            return
+    else:
+        if team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be the team owner or an administrator to update a team.", ephemeral=True)
+            return
 
     embeds = []
 
@@ -600,6 +605,7 @@ async def update_team_auto_accept(interaction: discord.Interaction, auto_accept:
 @group.command(name="reason_placeholder", description="Update the team join request reason placeholder")
 async def update_team_reason_placeholder(interaction: discord.Interaction, reason: str) -> None:
     await update_team_common(interaction, reason=reason)
+
 
 @group.command(name="role", description="Update the team role (only work when there is no role assigned)")
 async def update_team_role(interaction: discord.Interaction, role: Role) -> None:
