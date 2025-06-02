@@ -21,6 +21,73 @@ if not TEAM_THREAD_PARENT_ID or not TEAM_THREAD_PARENT_ID.isdigit():
 TEAM_THREAD_PARENT_ID = int(TEAM_THREAD_PARENT_ID)
 
 
+class JoinRequestButtons(discord.ui.View):
+    def __init__(self, team: Team, user: User | Member, name: str, reason: str, ):
+        super().__init__(timeout=None)
+        self.team = team
+        self.user = user
+        self.name = name
+        self.reason = reason
+
+    @ui.button(label="Accept", style=discord.ButtonStyle.green)
+    async def green_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
+            return
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("This command can only be used by members of the guild.", ephemeral=True)
+            return
+
+        if self.team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be the team owner or an administrator to accept a join request.", ephemeral=True)
+            return
+
+        # Add user to the team
+        self.team.member.append(self.user.id)
+        await update_team(interaction.guild.id, self.team)
+
+        if self.team.role_id:
+            role = interaction.guild.get_role(self.team.role_id)
+            if role:
+                try:
+                    await interaction.user.add_roles(role)
+                except discord.Forbidden:
+                    await interaction.response.send_message("I do not have permission to assign roles in this guild.", ephemeral=True)
+                except discord.HTTPException as e:
+                    await interaction.response.send_message(f"Failed to assign role: {e}", ephemeral=True)
+
+        members = "\n".join(
+            [f"<@{member}>" for member in self.team.member])
+        embed = discord.Embed(
+            title="Team Joined",
+            description=f"{self.user.mention} (IGN: {self.name}) have successfully join the team **{self.team.name}** **[{self.team.tag}]**, welcome to the team!.",
+            color=discord.Color.green()
+        )
+        embed.add_field(
+            name="Reason", value=self.reason, inline=False)
+        embed.add_field(name="Members", value=members, inline=False)
+        await interaction.response.edit_message(view=None)
+        await interaction.followup.send(embed=embed)
+
+    @ui.button(label="Reject", style=discord.ButtonStyle.red)
+    async def red_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a guild.", ephemeral=True)
+            return
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("This command can only be used by members of the guild.", ephemeral=True)
+            return
+        if self.team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be the team owner or an administrator to reject a join request.", ephemeral=True)
+            return
+        embed = discord.Embed(
+            title="Join Request Rejected",
+            description="This join request has been rejected.",
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+
+
 class JoinRequestModal(ui.Modal, title='Join request question'):
     name = ui.TextInput(label='In game name',
                         style=discord.TextStyle.short, max_length=12)
@@ -69,7 +136,9 @@ class JoinRequestModal(ui.Modal, title='Join request question'):
             embed.add_field(name="Members", value=members, inline=False)
             await interaction.response.send_message(embed=embed, silent=True)
             return
-        
+
+        button = JoinRequestButtons(
+            team=self.team, user=self.user, name=self.name.value, reason=self.reason.value)
         # If not auto accept, send join request
         embed = discord.Embed(
             title="Join Request",
@@ -77,7 +146,9 @@ class JoinRequestModal(ui.Modal, title='Join request question'):
             color=discord.Color.blue()
         )
         embed.add_field(name="Reason", value=self.reason.value, inline=False)
-        
+        embed.set_footer(
+            text="Note: only the team owner can accept or reject this request.")
+        await interaction.response.send_message(embed=embed, view=button, silent=True)
 
 
 @tree.command(name="register_team", description="Register a team, use this under your team threads")
