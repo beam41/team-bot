@@ -1,8 +1,8 @@
 from env import TEAM_THREAD_PARENT_ID
 from db import get_team, load_team, update_team
-from utils import format_bool_yes_no
+from utils import DISCORD_COLORS, DISCORD_COLORS_MAP, color_autocomplete, format_bool_yes_no, get_color, get_color_code
 import discord
-from discord import Member, Role, app_commands
+from discord import Color, Member, Role, app_commands
 import re
 from typing import Optional
 from strings import *
@@ -41,7 +41,6 @@ async def update_team_common(interaction: discord.Interaction, *, name: Optional
     embeds = []
 
     if name is not None:
-        name = name.strip()
         teams = await load_team(interaction.guild.id)
         for t in teams:
             if t.name == name:
@@ -75,17 +74,25 @@ async def update_team_common(interaction: discord.Interaction, *, name: Optional
                     )
 
     if color is not None:
-        color = color.lstrip('#').upper()
-        if not re.match(HEX_COLOR_PATTERN, color):
-            await interaction.response.send_message(INVALID_COLOR_ERR, ephemeral=True)
-            return
-        team.color = color
+        dc_color = Color.blurple()
+        if color in DISCORD_COLORS_MAP:
+            dc_color = DISCORD_COLORS_MAP.get(color)
+            if dc_color is None:
+                await interaction.response.send_message(INVALID_COLOR_ERR, ephemeral=True)
+                return
+        else:
+            try:
+                dc_color = get_color(color)
+            except ValueError:
+                await interaction.response.send_message(INVALID_COLOR_ERR, ephemeral=True)
+                return
+        team.color = get_color_code(dc_color)
         # Update role color if exists
         if team.role_id:
             role = interaction.guild.get_role(team.role_id)
             if role:
                 try:
-                    await role.edit(color=discord.Color(int(team.color, 16)))
+                    await role.edit(color=dc_color)
                 except (discord.Forbidden, discord.HTTPException) as e:
                     embeds.append(
                         discord.Embed(
@@ -110,7 +117,7 @@ async def update_team_common(interaction: discord.Interaction, *, name: Optional
         team.auto_accept = auto_accept
 
     if reason is not None:
-        team.reason = reason.strip()
+        team.reason = reason
 
     if link_role is not None:
         if team.role_id is not None:
@@ -171,6 +178,7 @@ async def update_team_tag(interaction: discord.Interaction, tag: str) -> None:
 
 
 @group.command(name=UPDATE_TEAM_COLOR_CMD, description=UPDATE_TEAM_COLOR_CMD_DESC)
+@app_commands.autocomplete(color=color_autocomplete)
 async def update_team_color(interaction: discord.Interaction, color: str) -> None:
     await update_team_common(interaction, color=color)
 

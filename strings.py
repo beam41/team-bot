@@ -115,7 +115,7 @@ TEAM_OWNER_OR_ADMIN_CHANGE_NUMBER_ERR = "You must be the team owner or an admini
 TEAM_OWNER_OR_ADMIN_POSITION_ERR = "You must be the team owner or an administrator to manage positions."
 
 # ===== VALIDATION ERROR MESSAGES =====
-INVALID_COLOR_ERR = "Invalid team color. Please provide a valid hex color code (6 characters, e.g., 'FF5733')."
+INVALID_COLOR_ERR = "Invalid team color. Valid colors are #<3 or 6 hexadecimal digits>, rgb(<number>, <number>, <number>), or color names like 'blue', 'red', etc."
 INVALID_TAG_ERR = "Invalid team tag. Please provide a valid tag (2-6 uppercase letters or numbers)."
 PLAYER_NUMBER_RANGE_ERR = "Player number must be between 0 and 99."
 PLAYER_NUMBER_INVALID_ERR = "Player number must be a valid number between 0 and 99."
@@ -263,13 +263,14 @@ UI_BUTTON_REJECT = "Reject"
 UI_NOTE_OWNER_ONLY = "Note: only the team owner can accept or reject this request."
 
 # ===== SHARED FORMATTING STRINGS =====
-FORMAT_TEAM_MEMBER = "`{:02d}` <@{}>{}"
-FORMAT_TEAM_COLOR_DISPLAY = "#{}"
+FORMAT_TEAM_MEMBER = "**`{:02d}`** <@{}>{}"
+FORMAT_TEAM_COLOR_DISPLAY = "`#{}`"
 FORMAT_USER_MENTION = "<@{}>"
 FORMAT_ROLE_MENTION = "<@&{}>"
 FORMAT_LOGGED_IN = 'We have logged in as {}'
 FORMAT_SYNCED_COMMANDS = 'Synced {} commands'
-
+FORMAT_POS = " - {}"
+FORMAT_POS_AS = " AS **{}**"
 # ===== SHARED DISPLAY VALUES =====
 BOOL_YES = "Yes"
 BOOL_NO = "No"

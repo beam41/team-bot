@@ -86,7 +86,7 @@ class JoinRequestButtons(discord.ui.View):
                         value=members, inline=False)
         embeds.append(embed)
         await interaction.response.edit_message(view=None)
-        await interaction.followup.send(embeds=embeds)
+        await interaction.followup.send(embeds=embeds, silent=True)
 
     @ui.button(label=UI_BUTTON_REJECT, style=discord.ButtonStyle.red)
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):

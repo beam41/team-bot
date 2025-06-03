@@ -2,9 +2,9 @@ from typing import Optional
 from commands.ui.unregister_team import UnregisterTeamConfirmButton
 from env import TEAM_THREAD_PARENT_ID
 from db import Position, Team, TeamMember, add_team, get_team, load_team, remove_team
-from utils import format_team_members, format_bool_yes_no
+from utils import DISCORD_COLORS, DISCORD_COLORS_MAP, color_autocomplete, format_team_members, format_bool_yes_no, get_color, get_color_code
 import discord
-from discord import app_commands
+from discord import Color, app_commands
 import re
 import time
 from strings import *
@@ -24,6 +24,7 @@ group = app_commands.Group(
     skip_make_role=REGISTER_TEAM_CMD_SKIP_MAKE_ROLE_DESC,
     positions=REGISTER_TEAM_CMD_POSITION_DESC
 )
+@app_commands.autocomplete(team_color=color_autocomplete)
 async def register_team(interaction: discord.Interaction, name: str, tag: str, team_color: str, auto_accept: bool, reason_placeholder: str, positions: Optional[str], skip_make_role: Optional[bool]) -> None:
     if not interaction.guild:
         await interaction.response.send_message(GUILD_ONLY_ERR, ephemeral=True)
@@ -42,13 +43,20 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
         return
 
     # Clean up and validate inputs
-    name = name.strip()
-    tag = tag.upper().strip()
-    team_color = team_color.lstrip('#').upper()
+    tag = tag.upper()
 
-    if team_color and not re.match(HEX_COLOR_PATTERN, team_color):
-        await interaction.response.send_message(INVALID_COLOR_ERR, ephemeral=True)
-        return
+    color = Color.blurple()
+    if team_color in DISCORD_COLORS_MAP:
+        color = DISCORD_COLORS_MAP.get(team_color)
+        if color is None:
+            await interaction.response.send_message(INVALID_COLOR_ERR, ephemeral=True)
+            return
+    else:
+        try:
+            color = get_color(team_color)
+        except ValueError:
+            await interaction.response.send_message(INVALID_COLOR_ERR, ephemeral=True)
+            return
 
     if not re.match(TEAM_TAG_PATTERN, tag):
         await interaction.response.send_message(INVALID_TAG_ERR, ephemeral=True)
@@ -72,10 +80,9 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
     embeds = []
     if not skip_make_role:
         try:
-            hex_color = int(team_color or "FFFFFF", 16)
             role = await interaction.guild.create_role(
                 name=tag,
-                color=discord.Color(hex_color),
+                color=color,
                 reason=f"Team {name} creation"
             )
             role_id = role.id
@@ -141,7 +148,7 @@ async def register_team(interaction: discord.Interaction, name: str, tag: str, t
         role_id=role_id,
         name=name,
         tag=tag,
-        color=team_color or "FFFFFF",
+        color=get_color_code(color),
         auto_accept=auto_accept,
         members=[owner_member],
         reason=reason_placeholder,

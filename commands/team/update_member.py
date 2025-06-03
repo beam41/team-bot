@@ -55,7 +55,6 @@ async def add_team_member(interaction: discord.Interaction, new_member: Member, 
     # If position is specified, assign it to the member
     position_name = None
     if position:
-        position = position.strip()
         position_obj = None
         for pos in team.positions:
             if pos.name == position:
@@ -101,7 +100,7 @@ async def add_team_member(interaction: discord.Interaction, new_member: Member, 
     embed = discord.Embed(
         title=TEAM_MEMBER_ADDED_TITLE,
         description=TEAM_MEMBER_ADDED_DESC.format(
-            new_member.id, team.name, team.tag, number, f" {AS} **{position_name}**" if position_name else ""),
+            new_member.id, team.name, team.tag, number, FORMAT_POS_AS.format(position_name) if position_name else ""),
         color=discord.Color.green()
     )
     embed.add_field(name=TEAM_MEMBER_ADDED_FIELD_CURRENT_MEMBERS,

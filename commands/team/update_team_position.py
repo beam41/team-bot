@@ -42,7 +42,6 @@ async def add_position(interaction: discord.Interaction, position: str) -> None:
         return
 
     # Validate position name
-    position = position.strip()
     if not position:
         await interaction.response.send_message(POSITION_NAME_EMPTY_ERR, ephemeral=True)
         return
@@ -76,7 +75,7 @@ async def add_position(interaction: discord.Interaction, position: str) -> None:
             inline=False
         )
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, silent=True)
 
 
 @group.command(name=EDIT_POSITION_CMD, description=EDIT_POSITION_CMD_DESC)
@@ -106,9 +105,6 @@ async def edit_position(interaction: discord.Interaction, position: str, new_pos
     if team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(TEAM_OWNER_OR_ADMIN_POSITION_ERR, ephemeral=True)
         return
-
-    position = position.strip()
-    new_position = new_position.strip()
 
     # Validate new position name
     if not new_position:
@@ -151,7 +147,7 @@ async def edit_position(interaction: discord.Interaction, position: str, new_pos
             inline=False
         )
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, silent=True)
 
 
 @group.command(name=DELETE_POSITION_CMD, description=DELETE_POSITION_CMD_DESC)
@@ -178,8 +174,6 @@ async def delete_position(interaction: discord.Interaction, position: str) -> No
     if team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(TEAM_OWNER_OR_ADMIN_POSITION_ERR, ephemeral=True)
         return
-
-    position = position.strip()
 
     position_to_delete = next(
         (p for p in team.positions if p.name == position), None)
@@ -217,4 +211,4 @@ async def delete_position(interaction: discord.Interaction, position: str) -> No
             inline=False
         )
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, silent=True)
