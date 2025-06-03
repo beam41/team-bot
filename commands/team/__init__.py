@@ -1,15 +1,17 @@
 # Team commands package
-from .management import register_team, unregister_team, team_details
-from .updates import group as update_team_group
-from .members import join_team, leave_team, add_team_member, remove_team_member
+from .team import group as team_group
+from .update_team import group as update_team_group
+from .join import join_team, leave_team
+from .update_member import group as update_member_group
+from .update_team_position import group as update_team_position_group
+from .update_member_info import group as update_member_info_group
 
 __all__ = [
-    'register_team',
-    'unregister_team',
-    'team_details',
+    'team_group',
     'update_team_group',
     'join_team',
     'leave_team',
-    'add_team_member',
-    'remove_team_member'
+    'update_member_group',
+    'update_team_position_group',
+    'update_member_info_group'
 ]

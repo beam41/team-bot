@@ -1,26 +1,25 @@
 # Commands package
 from .team import (
-    register_team,
-    unregister_team,
-    team_details,
+    team_group,
     update_team_group,
     join_team,
     leave_team,
-    add_team_member,
-    remove_team_member
+    update_member_group,
+    update_team_position_group,
+    update_member_info_group
 )
 
-from .ui import JoinRequestModal, JoinRequestButtons
+from .ui import JoinRequestModal, JoinRequestButtons, UnregisterTeamConfirmButton
 
 __all__ = [
-    'register_team',
-    'unregister_team',
-    'team_details',
+    'team_group',
     'update_team_group',
     'join_team',
     'leave_team',
-    'add_team_member',
-    'remove_team_member',
+    'update_member_group',
+    'update_team_position_group',
+    'update_member_info_group',
     'JoinRequestModal',
-    'JoinRequestButtons'
+    'JoinRequestButtons',
+    'UnregisterTeamConfirmButton'
 ]
