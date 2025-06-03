@@ -9,7 +9,8 @@ from commands import (
     join_team,
     leave_team,
     update_member_group,
-    update_team_group
+    update_team_group,
+    help_command
 )
 
 load_dotenv()
@@ -27,6 +28,7 @@ tree.add_command(leave_team)
 tree.add_command(team_group)
 tree.add_command(update_member_group)
 tree.add_command(update_team_group)
+tree.add_command(help_command)
 
 
 @client.event

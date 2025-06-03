@@ -42,7 +42,9 @@ LEAVE_TEAM_CMD_DESC = "Leave a team registered in this thread, this will not not
 # ===== TEAM MEMBER COMMAND =====
 TEAM_MEMBER_CMD_GROUP = "team_member"
 TEAM_MEMBER_CMD_GROUP_DESC = "Manage team members [OWNER/ADMIN ONLY]"
+ADD_TEAM_MEMBER_CMD = "add"
 ADD_TEAM_MEMBER_CMD_DESC = "Add a member to team registered in this thread [OWNER/ADMIN ONLY]"
+REMOVE_TEAM_MEMBER_CMD = "remove"
 REMOVE_TEAM_MEMBER_CMD_DESC = "Remove a member from team registered in this thread, silently [OWNER/ADMIN ONLY]"
 
 # ===== UPDATE MEMBER COMMAND GROUP =====
