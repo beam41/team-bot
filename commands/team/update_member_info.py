@@ -1,6 +1,6 @@
 from env import TEAM_THREAD_PARENT_ID
 from db import get_team, update_team
-from utils import format_team_members
+from utils import format_team_members, position_autocomplete
 import discord
 from discord import Member, app_commands
 from typing import Optional
@@ -87,6 +87,7 @@ async def change_player_number(interaction: discord.Interaction, new_number: int
     position=CHANGE_POSITION_CMD_POSITION_DESC,
     member=CHANGE_POSITION_CMD_MEMBER_DESC
 )
+@app_commands.autocomplete(position=position_autocomplete)
 async def change_position(interaction: discord.Interaction, position: str, member: Optional[Member]) -> None:
     if not interaction.guild:
         await interaction.response.send_message(GUILD_ONLY_ERR, ephemeral=True)

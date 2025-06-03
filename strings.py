@@ -80,7 +80,7 @@ UPDATE_TEAM_AUTO_ACCEPT_CMD_DESC = "Update the team auto_accept [OWNER/ADMIN ONL
 UPDATE_TEAM_REASON_CMD = "reason_placeholder"
 UPDATE_TEAM_REASON_CMD_DESC = "Update the team join request reason placeholder [OWNER/ADMIN ONLY]"
 UPDATE_TEAM_ROLE_CMD = "role"
-UPDATE_TEAM_ROLE_CMD_DESC = "Update the team role (only work when there is no role assigned)"
+UPDATE_TEAM_ROLE_CMD_DESC = "Update the team role (only work when there is no role assigned) [ADMIN ONLY]"
 
 # ===== POSITION MANAGEMENT COMMANDS =====
 UPDATE_POSITION_CMD_GROUP_DESC = "Update the team positions [OWNER/ADMIN ONLY]"

@@ -4,6 +4,7 @@ import discord
 from discord import app_commands
 import time
 from strings import *
+from utils import position_autocomplete
 from .update_team import group as update_team_group
 
 group = app_commands.Group(name="position",
@@ -34,7 +35,7 @@ async def add_position(interaction: discord.Interaction, position: str) -> None:
     if team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(TEAM_OWNER_OR_ADMIN_POSITION_ERR, ephemeral=True)
         return
-    
+
     # Check if the maximum number of positions has been reached
     if len(team.positions) >= MAX_POSITIONS:
         await interaction.response.send_message(MAX_POSITIONS_ERR, ephemeral=True)
@@ -83,6 +84,7 @@ async def add_position(interaction: discord.Interaction, position: str) -> None:
     position=EDIT_POSITION_CMD_POSITION_DESC,
     new_position=EDIT_POSITION_CMD_NEW_POSITION_DESC
 )
+@app_commands.autocomplete(position=position_autocomplete)
 async def edit_position(interaction: discord.Interaction, position: str, new_position: str) -> None:
     if not interaction.guild:
         await interaction.response.send_message(GUILD_ONLY_ERR, ephemeral=True)
@@ -119,7 +121,8 @@ async def edit_position(interaction: discord.Interaction, position: str, new_pos
         await interaction.response.send_message(POSITION_NOT_FOUND_ERR, ephemeral=True)
         return
 
-    existing_position = next((p for p in team.positions if p.name == new_position and p.id != position_to_edit.id), None)
+    existing_position = next((p for p in team.positions if p.name ==
+                             new_position and p.id != position_to_edit.id), None)
     if existing_position:
         await interaction.response.send_message(POSITION_ALREADY_EXISTS_ERR, ephemeral=True)
         return
@@ -153,6 +156,7 @@ async def edit_position(interaction: discord.Interaction, position: str, new_pos
 
 @group.command(name=DELETE_POSITION_CMD, description=DELETE_POSITION_CMD_DESC)
 @app_commands.describe(position=DELETE_POSITION_CMD_POSITION_DESC)
+@app_commands.autocomplete(position=position_autocomplete)
 async def delete_position(interaction: discord.Interaction, position: str) -> None:
     if not interaction.guild:
         await interaction.response.send_message(GUILD_ONLY_ERR, ephemeral=True)
@@ -174,9 +178,9 @@ async def delete_position(interaction: discord.Interaction, position: str) -> No
     if team.owner_id != interaction.user.id and not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(TEAM_OWNER_OR_ADMIN_POSITION_ERR, ephemeral=True)
         return
-    
+
     position = position.strip()
-    
+
     position_to_delete = next(
         (p for p in team.positions if p.name == position), None)
 

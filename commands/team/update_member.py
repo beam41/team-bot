@@ -1,6 +1,6 @@
 from env import TEAM_THREAD_PARENT_ID
 from db import get_team, update_team, TeamMember
-from utils import format_team_members
+from utils import format_team_members, position_autocomplete
 import discord
 from discord import Member, app_commands
 from typing import Optional
@@ -12,6 +12,7 @@ group = app_commands.Group(name=TEAM_MEMBER_CMD_GROUP,
 
 
 @group.command(name='add', description=ADD_TEAM_MEMBER_CMD_DESC)
+@app_commands.autocomplete(position=position_autocomplete)
 async def add_team_member(interaction: discord.Interaction, new_member: Member, number: int, position: Optional[str]) -> None:
     if not interaction.guild:
         await interaction.response.send_message(GUILD_ONLY_ERR, ephemeral=True)
